@@ -1,0 +1,2 @@
+Validation Macro F1-score: 0.7195
+Test Macro F1-score: 0.8889
