@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABSA Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #1a535c;
+            text-align: center;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+            min-height: 100px;
+            margin-bottom: 10px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            font-size: 18px;
+            background-color: #4ecdc4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #1a535c;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #results {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .loading {
+            text-align: center;
+            font-style: italic;
+            color: #888;
+        }
+        .error {
+            color: #d9534f;
+            font-weight: bold;
+        }
+        .sentiment-positive { color: #5cb85c; }
+        .sentiment-negative { color: #d9534f; }
+        .sentiment-neutral { color: #777; }
+
+        .overall {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid;
+        }
+        .overall.positive { background-color: #e6f7e6; border-color: #5cb85c; color: #5cb85c; }
+        .overall.negative { background-color: #fbeaea; border-color: #d9534f; color: #d9534f; }
+        .overall.neutral { background-color: #f0f0f0; border-color: #777; color: #777; }
+
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+        li .term {
+            font-weight: bold;
+        }
+        li .sentiment {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+        li .sentiment.positive { background-color: #5cb85c; }
+        li .sentiment.negative { background-color: #d9534f; }
+        li .sentiment.neutral { background-color: #777; }
+    </style>
+</head>
+<body>
+
+    <h1>📝 Aspect-Based Sentiment Analysis</h1>
+    <p>Enter an English review sentence (e.g., "The food was amazing but the service was terrible.")</p>
+
+    <form id="absaForm">
+        <textarea id="textInput" rows="4" placeholder="Enter your sentence here..."></textarea>
+        <button id="submitButton" type="submit">Analyze</button>
+    </form>
+
+    <div id="results">
+        <div id="loadingIndicator" class="loading" style="display: none;">
+            Analyzing...
+        </div>
+        <div id="errorDisplay" class="error"></div>
+        <div id="resultContent"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('absaForm');
+        const textInput = document.getElementById('textInput');
+        const submitButton = document.getElementById('submitButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const resultContent = document.getElementById('resultContent');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = textInput.value.trim();
+            if (!text) return;
+
+            // Show loading and disable button
+            loadingIndicator.style.display = 'block';
+            submitButton.disabled = true;
+            errorDisplay.textContent = '';
+            resultContent.innerHTML = '';
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Server error');
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                errorDisplay.textContent = `Error: ${error.message}`;
+            } finally {
+                // Hide loading and re-enable button
+                loadingIndicator.style.display = 'none';
+                submitButton.disabled = false;
+            }
+        });
+
+        function displayResults(data) {
+            let html = '';
+
+            // 1. Display Overall Sentiment
+            if (data.overall) {
+                let overallClass = data.overall; // 'positive', 'negative', 'neutral'
+                html += `<div class="overall ${overallClass}">
+                            Overall Sentiment: ${capitalize(data.overall)}
+                         </div>`;
+            }
+            
+            // 2. Display Aspects
+            if (data.aspects && data.aspects.length > 0) {
+                html += '<h3>Detected Aspects:</h3><ul>';
+                data.aspects.forEach(aspect => {
+                    let sentimentClass = aspect.sentiment;
+                    html += `<li>
+                                <span class="term">${aspect.term}</span>
+                                <span class="sentiment ${sentimentClass}">
+                                    ${capitalize(aspect.sentiment)}
+                                </span>
+                             </li>`;
+                });
+                html += '</ul>';
+            } else if (!data.overall || data.overall === 'neutral') {
+                html += '<p>No aspects detected.</p>';
+            }
+
+            resultContent.innerHTML = html;
+        }
+        
+        function capitalize(s) {
+            return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+    </script>
+
+</body>
+</html>
